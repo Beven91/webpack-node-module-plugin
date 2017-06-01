@@ -1,0 +1,1 @@
+module.exports.NodeModulePlugin = require('./src/NodeModulePlugin.js');

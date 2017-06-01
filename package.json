@@ -1,0 +1,22 @@
+{
+  "name": "webpack-node-module-plugin",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Beven91/webpack-node-module-plugin.git"
+  },
+  "author": "Beven",
+  "license": "MIT",
+  "peerDependencies": {
+    "webpack": "^2.5.1"
+  },
+  "bugs": {
+    "url": "https://github.com/Beven91/webpack-node-module-plugin/issues"
+  },
+  "homepage": "https://github.com/Beven91/webpack-node-module-plugin#readme"
+}
