@@ -11,17 +11,21 @@ require('./dependencies/NodeRequireHeaderDependencyTemplate.js')
 require('./dependencies/ModuleDependencyTemplateAsResolveName.js')
 
 var path = require('path')
-var fs = require('fs')
+var fse = require('fs-extra');
 var Entrypoint = require('webpack/lib/Entrypoint')
+var NormalModule = require('webpack/lib/NormalModule.js')
 var ConcatSource = require('webpack-sources').ConcatSource
 
 /**
  * 服务端打包插件
  * @param {String} contextPath 工程目录
  */
-function NodeModulePlugin (contextPath) {
+function NodeModulePlugin(contextPath, cdnName, targetRoot) {
   this.extraChunks = {}
+  this.extraPackage = {};
   this.contextPath = contextPath
+  this.targetRoot = targetRoot;
+  this.cdnName = cdnName;
 }
 
 NodeModulePlugin.prototype.apply = function (compiler) {
@@ -31,6 +35,8 @@ NodeModulePlugin.prototype.apply = function (compiler) {
     thisContext.registerNodeEntry(compilation)
     // 服务端代码打包，不再合并成一个文件，而是改成每个es6模块文件文件打包到目标目录
     thisContext.registerNodeTemplate(compilation)
+    //输出package assets
+    thisContext.registerNodePackage(compiler, compilation);
   })
 }
 
@@ -48,30 +54,30 @@ NodeModulePlugin.prototype.registerNodeEntry = function (compilation) {
       .filter(function (chunk) {
         return chunk.hasRuntime() && chunk.name
       }).map(function (chunk) {
-      chunk.modules
-        .slice()
-        .filter(function (mod) {
-          return (mod.userRequest)
+        chunk.forEachModule(function (mod) {
+          if (mod.userRequest) {
+            thisContext.handleAddChunk(addChunk, mod, chunk, compilation)
+          }
         })
-        .forEach(function (mod) {
-          thisContext.handleAddChunk(addChunk, mod, chunk, outputOptions)
-        })
-    })
+      })
   })
 }
 
 /**
  * 处理文件输出
  */
-NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, outputOptions) {
+NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, compilation) {
   var info = path.parse(path.relative(this.contextPath, mod.userRequest))
   var name = path.join(info.root, info.dir, info.name)
   var newChunk = this.extraChunks[name]
   if (!newChunk) {
-    newChunk = this.extraChunks[name] = addChunk(name)
     var entrypoint = new Entrypoint(name)
+    newChunk = this.extraChunks[name] = addChunk(name)
     entrypoint.chunks.push(newChunk)
     newChunk.entrypoints = [entrypoint]
+    if (info.dir.indexOf("node_modules") > -1) {
+      this.handlePackage(newChunk, mod, addChunk)
+    }
   }
   newChunk.addModule(mod)
   mod.addChunk(newChunk)
@@ -79,27 +85,156 @@ NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, outp
 }
 
 /**
+ * 处理模块package.json
+ */
+NodeModulePlugin.prototype.handlePackage = function (chunk, mod, addChunk) {
+  var request = mod.userRequest;
+  request = path.dirname(request);
+  var lastNodeIndex = request.lastIndexOf('node_modules');
+  var firstNodeIndex = request.indexOf('node_modules');
+  var packageName = request.substring(lastNodeIndex).split('\\')[1] || '';
+  var baseDir = request.substring(0, lastNodeIndex) + 'node_modules\\' + packageName;
+  var pgk = path.join(baseDir, 'package.json');
+  if (!this.extraPackage[pgk] && fse.existsSync(pgk)) {
+    this.extraPackage[pgk] = {
+      file: pgk,
+      packageName: packageName,
+      name: request.substring(firstNodeIndex, lastNodeIndex) + 'node_modules\\' + packageName + "\\package.json",
+      chunk: chunk
+    }
+  }
+}
+
+/**
+ * 输出package.json处理
+ */
+NodeModulePlugin.prototype.registerNodePackage = function (compiler) {
+  var thisContext = this;
+  compiler.plugin('emit', function (compilation, cb) {
+    let chunkPackageKeys = Object.keys(thisContext.extraPackage);
+    let chunkTemplate = compilation.outputOptions.chunkFilename;
+    var chunkNodeModuleNames = [];
+    chunkPackageKeys.forEach(function (key) {
+      var chunkPackage = thisContext.extraPackage[key];
+      var pgk = chunkPackage.file;
+      var file = compilation.getPath(chunkTemplate, { chunk: chunkPackage.chunk })
+      var outputPath = path.dirname(file);
+      var copyTo = outputPath + '/' + chunkPackage.name;
+      var package = fse.readJsonSync(pgk);
+      package.main = package.webpack ? package.webpack : package.main;
+      var content = JSON.stringify(package,null,4);
+      var size = content.length;
+      chunkNodeModuleNames.push(chunkPackage.packageName);
+      compilation.assets[copyTo] = {
+        size: function () {
+          return size;
+        },
+        source: function () {
+          return content;
+        }
+      };
+    })
+    thisContext.copyEntryNodeModules(compilation, chunkNodeModuleNames);
+    cb();
+  });
+}
+
+/**
  * 自定义webpack ModuleTemplate.render 
  * 改成打包目标文件保留原生nodejs风格
  */
 NodeModulePlugin.prototype.registerNodeTemplate = function (compilation) {
+  var cdnName = this.cdnName;
+  var outputOptions = compilation.outputOptions;
+  var publicPath = outputOptions.publicPath;
   compilation.mainTemplate.plugin('render', function (bootstrapSource, chunk, hash, moduleTemplate, dependencyTemplates) {
     var source = new ConcatSource()
-    chunk.modules.map(function (module) {
+    chunk.forEachModule(function (module) {
       var ext = path.extname(module.userRequest)
+      var assets = Object.keys(module.assets || {});
       var moduleSource = null
       switch (ext) {
         case '.json':
           moduleSource = module._source
           break
         default:
-          moduleSource = module.source(dependencyTemplates, moduleTemplate.outputOptions, moduleTemplate.requestShortener)
+          if (assets.length > 0) {
+            var url = assets[0];
+            url = cdnName ? cdnName + " + '" + url + "'" : "'" + publicPath + url + "'";
+            moduleSource = 'module.exports= ' + url;
+          } else {
+            moduleSource = module.source(dependencyTemplates, moduleTemplate.outputOptions, moduleTemplate.requestShortener)
+          }
           break
       }
       source.add(moduleSource)
     })
     return source
   })
+}
+
+/**
+ * 复制服务端node_modules代码
+ */
+NodeModulePlugin.prototype.copyEntryNodeModules = function (compilation, chunkNodeModuleNames) {
+  var targetRoot = this.targetRoot;
+  var projectRoot = process.cwd();
+  var allModules = this.getDependencyNodeModules(projectRoot);
+  var allModulesKeys = Object.keys(allModules);
+  var bin = 'node_modules/.bin';
+  fse.copySync(path.join(projectRoot, bin), path.join(targetRoot, bin));
+  allModulesKeys.forEach(function (key) {
+    var src = allModules[key];
+    if (chunkNodeModuleNames.indexOf(key) < 0) {
+      var dest = path.join(targetRoot, 'node_modules', src.split('node_modules')[1]);
+      fse.copySync(src, dest);
+    }
+  })
+}
+
+/**
+ * 获取工程目录下需要复制的node_modules
+ */
+NodeModulePlugin.prototype.getDependencyNodeModules = function (projectRoot) {
+  var package = path.join(projectRoot, 'package.json');
+  return this.findPackageDependencies(package, projectRoot);
+}
+
+/**
+ * 获取当前项目下需要复制的node_modules列表
+ * @param file 项目package.json路径
+ * @param projectRoot 项目根目录
+ * @param allModules 默认不用传递
+ * @returns {Object} 所有依赖模块
+ */
+NodeModulePlugin.prototype.findPackageDependencies = function (file, projectRoot, allModules) {
+  var thisContext = this;
+  var package = require(file);
+  var dependencies = Object.keys(package.dependencies || {});
+  var selfRoot = path.dirname(file);
+  allModules = allModules || {};
+  dependencies.forEach(function (dependency) {
+    if (!allModules[dependency]) {
+      var dpfile = thisContext.getPackagePath(selfRoot, projectRoot, dependency);
+      allModules[dependency] = path.dirname(dpfile);
+      thisContext.findPackageDependencies(dpfile, projectRoot, allModules);
+    }
+  })
+  return allModules;
+}
+
+/**
+ * 查找依赖模块路径
+ * @param parentDir 父级目录路径
+ * @param projectRoot 项目根目录
+ * @param name 依赖模块名称
+ */
+NodeModulePlugin.prototype.getPackagePath = function (parentDir, projectRoot, name) {
+  var projectNodeModule = path.join(projectRoot, 'node_modules', name, 'package.json');
+  if (!fse.existsSync(projectNodeModule)) {
+    projectNodeModule = path.join(parentDir, 'node_modules', name, 'package.json');
+  }
+  return projectNodeModule;
 }
 
 module.exports = NodeModulePlugin;
