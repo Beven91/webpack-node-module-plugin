@@ -30,7 +30,7 @@ ModuleDependencyTemplateAsResolveName.prototype.apply = function (dep, source, o
     sourcePath = (sourcePath.indexOf('babel!') > -1 ? sourcePath.split('babel!')[1] : sourcePath)
     sourcePath = path.dirname(sourcePath)
     content = path.relative(sourcePath, module.resource)
-    if (extName && extName != '.js') {
+    if (extName != '.js') {
       var info = path.parse(content)
       content = path.join(info.root, info.dir, info.name + '.js')
     }
