@@ -24,17 +24,18 @@ ModuleDependencyTemplateAsResolveName.prototype.apply = function (dep, source, o
   var content = request
   var sourcePath = source._source._name
   var isRequirejs = (request.indexOf('./') > -1 || request.indexOf('../') > -1) || request.indexOf('image!') == 0;
-  sourcePath = (sourcePath.indexOf('babel!') > -1 ? sourcePath.split('babel!')[1] : sourcePath)
-  sourcePath = path.dirname(sourcePath)
   var extName = path.extname(content)
+  var hasAssets = Object.keys(module.assets||{}).length>0;
   if (module.resource && isRequirejs) {
+    sourcePath = (sourcePath.indexOf('babel!') > -1 ? sourcePath.split('babel!')[1] : sourcePath)
+    sourcePath = path.dirname(sourcePath)
     content = path.relative(sourcePath, module.resource)
     if (extName && extName != '.js') {
       var info = path.parse(content)
       content = path.join(info.root, info.dir, info.name + '.js')
     }
     content = './' + content.replace(/\\/g, '/')
-  } else if (extName && extName != '.js') {
+  } else if (hasAssets && extName && extName != '.js') {
     var info = path.parse(content)
     content = path.join(info.root, info.dir, info.name + '.js')
     content = content.replace(/\\/g, '/')

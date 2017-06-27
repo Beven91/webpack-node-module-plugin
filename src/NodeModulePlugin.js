@@ -71,6 +71,7 @@ NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, comp
   var name = path.join(info.root, info.dir, info.name)
   var newChunk = this.extraChunks[name]
   if (!newChunk) {
+    mod.variables= [];
     var entrypoint = new Entrypoint(name)
     newChunk = this.extraChunks[name] = addChunk(name)
     entrypoint.chunks.push(newChunk)
@@ -113,7 +114,6 @@ NodeModulePlugin.prototype.registerNodePackage = function (compiler) {
   compiler.plugin('emit', function (compilation, cb) {
     let chunkPackageKeys = Object.keys(thisContext.extraPackage);
     let chunkTemplate = compilation.outputOptions.chunkFilename;
-    var chunkNodeModuleNames = [];
     chunkPackageKeys.forEach(function (key) {
       var chunkPackage = thisContext.extraPackage[key];
       var pgk = chunkPackage.file;
@@ -122,9 +122,8 @@ NodeModulePlugin.prototype.registerNodePackage = function (compiler) {
       var copyTo = outputPath + '/' + chunkPackage.name;
       var package = fse.readJsonSync(pgk);
       package.main = package.webpack ? package.webpack : package.main;
-      var content = JSON.stringify(package,null,4);
+      var content = JSON.stringify(package, null, 4);
       var size = content.length;
-      chunkNodeModuleNames.push(chunkPackage.packageName);
       compilation.assets[copyTo] = {
         size: function () {
           return size;
@@ -134,7 +133,7 @@ NodeModulePlugin.prototype.registerNodePackage = function (compiler) {
         }
       };
     })
-    thisContext.copyEntryNodeModules(compilation, chunkNodeModuleNames);
+    thisContext.copyEntryNodeModules(compilation);
     cb();
   });
 }
@@ -147,6 +146,7 @@ NodeModulePlugin.prototype.registerNodeTemplate = function (compilation) {
   var cdnName = this.cdnName;
   var outputOptions = compilation.outputOptions;
   var publicPath = outputOptions.publicPath;
+  var replacement = this.replacement.bind(this);
   compilation.mainTemplate.plugin('render', function (bootstrapSource, chunk, hash, moduleTemplate, dependencyTemplates) {
     var source = new ConcatSource()
     chunk.forEachModule(function (module) {
@@ -167,9 +167,23 @@ NodeModulePlugin.prototype.registerNodeTemplate = function (compilation) {
           }
           break
       }
+      replacement(moduleSource);
       source.add(moduleSource)
     })
     return source
+  })
+}
+
+/**
+ * 替换 __webpack_require
+ */
+NodeModulePlugin.prototype.replacement = function (moduleSource) {
+  var replacements = moduleSource.replacements || [];
+  replacements.forEach(function (rep) {
+    var v = rep[2] || "";
+    var isVar = v.indexOf("WEBPACK VAR INJECTION") > -1;
+    v = isVar ? "" : v.replace(/__webpack_require__/g, 'require');
+    rep[2] = v;
   })
 }
 
@@ -185,10 +199,8 @@ NodeModulePlugin.prototype.copyEntryNodeModules = function (compilation, chunkNo
   fse.copySync(path.join(projectRoot, bin), path.join(targetRoot, bin));
   allModulesKeys.forEach(function (key) {
     var src = allModules[key];
-    if (chunkNodeModuleNames.indexOf(key) < 0) {
-      var dest = path.join(targetRoot, 'node_modules', src.split('node_modules')[1]);
-      fse.copySync(src, dest);
-    }
+    var dest = path.join(targetRoot, 'node_modules', src.split('node_modules')[1]);
+    fse.copySync(src, dest);
   })
 }
 
