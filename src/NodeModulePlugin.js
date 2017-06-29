@@ -93,14 +93,14 @@ NodeModulePlugin.prototype.handlePackage = function (chunk, mod, addChunk) {
   request = path.dirname(request);
   var lastNodeIndex = request.lastIndexOf('node_modules');
   var firstNodeIndex = request.indexOf('node_modules');
-  var packageName = request.substring(lastNodeIndex).split('\\')[1] || '';
-  var baseDir = request.substring(0, lastNodeIndex) + 'node_modules\\' + packageName;
+  var packageName = request.substring(lastNodeIndex).split(path.sep)[1] || '';
+  var baseDir = request.substring(0, lastNodeIndex) + 'node_modules/' + packageName;
   var pgk = path.join(baseDir, 'package.json');
   if (!this.extraPackage[pgk] && fse.existsSync(pgk)) {
     this.extraPackage[pgk] = {
       file: pgk,
       packageName: packageName,
-      name: request.substring(firstNodeIndex, lastNodeIndex) + 'node_modules\\' + packageName + "\\package.json",
+      name: request.substring(firstNodeIndex, lastNodeIndex) + 'node_modules/' + packageName + "/package.json",
       chunk: chunk
     }
   }
