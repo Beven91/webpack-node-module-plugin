@@ -37,6 +37,8 @@ NodeModulePlugin.prototype.apply = function (compiler) {
     thisContext.registerNodeTemplate(compilation)
     //输出package assets
     thisContext.registerNodePackage(compiler, compilation);
+    //注册 normal-module-loader
+    thisContext.registerNodeNormalModuleLoader(compilation);
   })
 }
 
@@ -69,11 +71,15 @@ NodeModulePlugin.prototype.registerNodeEntry = function (compilation) {
 NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, compilation) {
   var info = path.parse(path.relative(this.contextPath, mod.userRequest))
   var name = path.join(info.root, info.dir, info.name)
-  var newChunk = this.extraChunks[name]
+  var nameWith = name + info.ext;
+  var newChunk = this.extraChunks[nameWith]
+  if (info.ext !== ".js") {
+    name = name + info.ext;
+  }
   if (!newChunk) {
-    mod.variables= [];
+    mod.variables = [];
     var entrypoint = new Entrypoint(name)
-    newChunk = this.extraChunks[name] = addChunk(name)
+    newChunk = this.extraChunks[nameWith] = addChunk(name)
     entrypoint.chunks.push(newChunk)
     newChunk.entrypoints = [entrypoint]
     if (info.dir.indexOf("node_modules") > -1) {
@@ -172,6 +178,18 @@ NodeModulePlugin.prototype.registerNodeTemplate = function (compilation) {
     })
     return source
   })
+}
+
+/**
+ * 注册normal module loader
+ */
+NodeModulePlugin.prototype.registerNodeNormalModuleLoader = function (compilation) {
+  compilation.plugin("normal-module-loader", function (loaderContext, module) {
+    var exec = loaderContext.exec.bind(loaderContext)
+    loaderContext.exec = function (code, filename) {
+      return exec(code, filename.split('!').pop());
+    }
+  });
 }
 
 /**
