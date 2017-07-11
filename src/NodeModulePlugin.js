@@ -7,14 +7,17 @@
  *  而是保留原始目录结构输出到output目录下
  */
 
-require('./dependencies/NodeRequireHeaderDependencyTemplate.js')
-require('./dependencies/ModuleDependencyTemplateAsResolveName.js')
-
 var path = require('path')
 var fse = require('fs-extra');
 var Entrypoint = require('webpack/lib/Entrypoint')
 var NormalModule = require('webpack/lib/NormalModule.js')
+var AMDPlugin = require('webpack/lib/dependencies/AMDPlugin.js')
 var ConcatSource = require('webpack-sources').ConcatSource
+
+//取消AMD模式
+AMDPlugin.prototype.apply = function(){
+
+}
 
 /**
  * 服务端打包插件
@@ -26,10 +29,13 @@ function NodeModulePlugin(contextPath, cdnName, targetRoot) {
   this.contextPath = contextPath
   this.targetRoot = targetRoot;
   this.cdnName = cdnName;
+  this.Resolve = require('./dependencies/ModuleDependencyTemplateAsResolveName.js');
+  this.Template = require('./dependencies/NodeRequireHeaderDependencyTemplate.js')
 }
 
 NodeModulePlugin.prototype.apply = function (compiler) {
   var thisContext = this
+  this.Resolve.setOptions(compiler.options);
   compiler.plugin('this-compilation', function (compilation) {
     // 自定义服务端js打包模板渲染 取消webpackrequire机制，改成纯require
     thisContext.registerNodeEntry(compilation)
@@ -73,7 +79,7 @@ NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, comp
   var name = path.join(info.root, info.dir, info.name)
   var nameWith = name + info.ext;
   var newChunk = this.extraChunks[nameWith]
-  if (info.ext !== ".js") {
+  if (info.ext !== '.js') {
     name = name + info.ext;
   }
   if (!newChunk) {
@@ -95,18 +101,21 @@ NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, comp
  * 处理模块package.json
  */
 NodeModulePlugin.prototype.handlePackage = function (chunk, mod, addChunk) {
-  var request = mod.userRequest;
+  var request = mod.resource;
+  var resource = mod.resource;
   request = path.dirname(request);
   var lastNodeIndex = request.lastIndexOf('node_modules');
   var firstNodeIndex = request.indexOf('node_modules');
   var packageName = request.substring(lastNodeIndex).split(path.sep)[1] || '';
   var baseDir = request.substring(0, lastNodeIndex) + 'node_modules/' + packageName;
   var pgk = path.join(baseDir, 'package.json');
+  var main = resource.substring(lastNodeIndex).replace(/\\/g, '/').split('node_modules/' + packageName + '/').pop();
   if (!this.extraPackage[pgk] && fse.existsSync(pgk)) {
     this.extraPackage[pgk] = {
       file: pgk,
+      main: main,
       packageName: packageName,
-      name: request.substring(firstNodeIndex, lastNodeIndex) + 'node_modules/' + packageName + "/package.json",
+      name: request.substring(firstNodeIndex, lastNodeIndex) + 'node_modules/' + packageName + '/package.json',
       chunk: chunk
     }
   }
@@ -118,8 +127,9 @@ NodeModulePlugin.prototype.handlePackage = function (chunk, mod, addChunk) {
 NodeModulePlugin.prototype.registerNodePackage = function (compiler) {
   var thisContext = this;
   compiler.plugin('emit', function (compilation, cb) {
-    let chunkPackageKeys = Object.keys(thisContext.extraPackage);
-    let chunkTemplate = compilation.outputOptions.chunkFilename;
+    var chunkPackageKeys = Object.keys(thisContext.extraPackage);
+    var chunkTemplate = compilation.outputOptions.chunkFilename;
+    var chunkModuleNames = [];
     chunkPackageKeys.forEach(function (key) {
       var chunkPackage = thisContext.extraPackage[key];
       var pgk = chunkPackage.file;
@@ -127,9 +137,10 @@ NodeModulePlugin.prototype.registerNodePackage = function (compiler) {
       var outputPath = path.dirname(file);
       var copyTo = outputPath + '/' + chunkPackage.name;
       var package = fse.readJsonSync(pgk);
-      package.main = package.webpack ? package.webpack : package.main;
+      package.main = chunkPackage.main;
       var content = JSON.stringify(package, null, 4);
       var size = content.length;
+      chunkModuleNames.push(chunkPackage.packageName)
       compilation.assets[copyTo] = {
         size: function () {
           return size;
@@ -139,7 +150,7 @@ NodeModulePlugin.prototype.registerNodePackage = function (compiler) {
         }
       };
     })
-    thisContext.copyEntryNodeModules(compilation);
+    thisContext.copyEntryNodeModules(compilation, chunkModuleNames);
     cb();
   });
 }
@@ -201,12 +212,15 @@ NodeModulePlugin.prototype.replacement = function (moduleSource) {
     var v = rep[2] || "";
     var isVar = v.indexOf("WEBPACK VAR INJECTION") > -1;
     v = isVar ? "" : v.replace(/__webpack_require__/g, 'require');
+    if (v.indexOf("AMD") > -1) {
+      v = "";
+    }
     rep[2] = v;
   })
 }
 
 /**
- * 复制服务端node_modules代码
+ * 复制服务端node_modules代码e
  */
 NodeModulePlugin.prototype.copyEntryNodeModules = function (compilation, chunkNodeModuleNames) {
   var targetRoot = this.targetRoot;
