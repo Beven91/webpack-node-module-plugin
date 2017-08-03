@@ -15,7 +15,7 @@ var AMDPlugin = require('webpack/lib/dependencies/AMDPlugin.js')
 var ConcatSource = require('webpack-sources').ConcatSource
 
 //取消AMD模式
-AMDPlugin.prototype.apply = function(){
+AMDPlugin.prototype.apply = function () {
 
 }
 
@@ -260,8 +260,10 @@ NodeModulePlugin.prototype.findPackageDependencies = function (file, projectRoot
   dependencies.forEach(function (dependency) {
     if (!allModules[dependency]) {
       var dpfile = thisContext.getPackagePath(selfRoot, projectRoot, dependency);
-      allModules[dependency] = path.dirname(dpfile);
-      thisContext.findPackageDependencies(dpfile, projectRoot, allModules);
+      if (dpfile) {
+        allModules[dependency] = path.dirname(dpfile);
+        thisContext.findPackageDependencies(dpfile, projectRoot, allModules);
+      }
     }
   })
   return allModules;
@@ -274,9 +276,18 @@ NodeModulePlugin.prototype.findPackageDependencies = function (file, projectRoot
  * @param name 依赖模块名称
  */
 NodeModulePlugin.prototype.getPackagePath = function (parentDir, projectRoot, name) {
-  var projectNodeModule = path.join(projectRoot, 'node_modules', name, 'package.json');
-  if (!fse.existsSync(projectNodeModule)) {
-    projectNodeModule = path.join(parentDir, 'node_modules', name, 'package.json');
+  var projectNodeModule = null;
+  var pathRoot = path.parse(projectRoot).root;
+  for (
+    var currentRoot = projectRoot;
+    currentRoot != pathRoot;
+    currentRoot = path.dirname(currentRoot)
+  ) {
+    var package = path.join(currentRoot, 'node_modules', name, 'package.json');
+    if (fse.existsSync(package)) {
+      projectNodeModule = package;
+      break;
+    }
   }
   return projectNodeModule;
 }
