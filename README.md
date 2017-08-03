@@ -20,6 +20,13 @@ Webpack config example:
 
 ```js
     var NodeModulePlugin  =require('webpack-node-module-plugin').NodeModulePlugin;
+    // 静态资源url前是否添加一个全局变量进行拼接
+    // 例如：require('./images/a.jpg') --> webpack --> __cdnurl+'/app/assets/sdf23422sssdf.jpg'
+    var cdnVariableName= '__cdnurl__';
+    // 发布目录根路径  copyNodeMoudles为false时可以不传递
+    var targetRoot = 'd:/release/web';
+    // 是否复制node_modules到发布目录下 默认: false
+    var copyNodeMoudles = true;
 
     module.exports = {
       entry: {
@@ -33,7 +40,7 @@ Webpack config example:
       },
       plugins:[
         ....
-        new NodeModulePlugin('rootDir')
+        new NodeModulePlugin('rootDir',cdnVariableName,targetRoot,copyNodeMoudles)
       ]
     }
 ```

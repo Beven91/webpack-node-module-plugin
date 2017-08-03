@@ -22,13 +22,17 @@ AMDPlugin.prototype.apply = function () {
 /**
  * 服务端打包插件
  * @param {String} contextPath 工程目录
+ * @param {String} cdnName 静态资源url前缀变量名 例如: 设置值为__cdnurl 则输出 __cdnurl+'/app/xxxxx.jpg'
+ * @param {String} targetRoot 发布目标根路径
+ * @param {Boolean} copyNodeModules 是否复制node_modules
  */
-function NodeModulePlugin(contextPath, cdnName, targetRoot) {
+function NodeModulePlugin(contextPath, cdnName, targetRoot,copyNodeModules) {
   this.extraChunks = {}
   this.extraPackage = {};
   this.contextPath = contextPath
   this.targetRoot = targetRoot;
   this.cdnName = cdnName;
+  this.copyNodeModules = copyNodeModules;
   this.Resolve = require('./dependencies/ModuleDependencyTemplateAsResolveName.js');
   this.Template = require('./dependencies/NodeRequireHeaderDependencyTemplate.js')
 }
@@ -224,16 +228,18 @@ NodeModulePlugin.prototype.replacement = function (moduleSource) {
  */
 NodeModulePlugin.prototype.copyEntryNodeModules = function (compilation, chunkNodeModuleNames) {
   var targetRoot = this.targetRoot;
-  var projectRoot = process.cwd();
-  var allModules = this.getDependencyNodeModules(projectRoot);
-  var allModulesKeys = Object.keys(allModules);
-  var bin = 'node_modules/.bin';
-  fse.copySync(path.join(projectRoot, bin), path.join(targetRoot, bin));
-  allModulesKeys.forEach(function (key) {
-    var src = allModules[key];
-    var dest = path.join(targetRoot, 'node_modules', src.split('node_modules')[1]);
-    fse.copySync(src, dest);
-  })
+  if (this.copyNodeModules) {
+    var projectRoot = process.cwd();
+    var allModules = this.getDependencyNodeModules(projectRoot);
+    var allModulesKeys = Object.keys(allModules);
+    var bin = 'node_modules/.bin';
+    fse.copySync(path.join(projectRoot, bin), path.join(targetRoot, bin));
+    allModulesKeys.forEach(function (key) {
+      var src = allModules[key];
+      var dest = path.join(targetRoot, 'node_modules', src.split('node_modules')[1]);
+      fse.copySync(src, dest);
+    })
+  }
 }
 
 /**
