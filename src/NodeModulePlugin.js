@@ -26,7 +26,7 @@ AMDPlugin.prototype.apply = function () {
  * @param {String} targetRoot 发布目标根路径
  * @param {Boolean} copyNodeModules 是否复制node_modules
  */
-function NodeModulePlugin(contextPath, cdnName, targetRoot,copyNodeModules) {
+function NodeModulePlugin(contextPath, cdnName, targetRoot, copyNodeModules) {
   this.extraChunks = {}
   this.extraPackage = {};
   this.contextPath = contextPath
@@ -264,6 +264,9 @@ NodeModulePlugin.prototype.findPackageDependencies = function (file, projectRoot
   var selfRoot = path.dirname(file);
   allModules = allModules || {};
   dependencies.forEach(function (dependency) {
+    if (dependency == 'rnw-bundler') {
+      return;
+    }
     if (!allModules[dependency]) {
       var dpfile = thisContext.getPackagePath(selfRoot, projectRoot, dependency);
       if (dpfile) {
