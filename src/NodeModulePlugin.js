@@ -7,12 +7,14 @@
  *  而是保留原始目录结构输出到output目录下
  */
 
-var path = require('path')
+var path = require('path');
 var fse = require('fs-extra');
-var Entrypoint = require('webpack/lib/Entrypoint')
-var NormalModule = require('webpack/lib/NormalModule.js')
-var AMDPlugin = require('webpack/lib/dependencies/AMDPlugin.js')
-var ConcatSource = require('webpack-sources').ConcatSource
+var Entrypoint = require('webpack/lib/Entrypoint');
+var NormalModule = require('webpack/lib/NormalModule.js');
+var AMDPlugin = require('webpack/lib/dependencies/AMDPlugin.js');
+var ConcatSource = require('webpack-sources').ConcatSource;
+var CopyWebpackPlugin = require('copy-webpack-plugin');
+var babel = require('babel-core');
 
 //取消AMD模式
 AMDPlugin.prototype.apply = function () {
@@ -24,22 +26,30 @@ AMDPlugin.prototype.apply = function () {
  * @param {String} contextPath 工程目录
  * @param {String} cdnName 静态资源url前缀变量名 例如: 设置值为__cdnurl 则输出 __cdnurl+'/app/xxxxx.jpg'
  * @param {String} targetRoot 发布目标根路径
- * @param {Boolean} copyNodeModules 是否复制node_modules
+ * @param {String} projectRoot web项目根目录
+ * @param {Object} babelRc babel配置
  */
-function NodeModulePlugin(contextPath, cdnName, targetRoot, copyNodeModules) {
+function NodeModulePlugin(contextPath, cdnName, targetRoot, babelRc, ignores) {
   this.extraChunks = {}
   this.extraPackage = {};
-  this.contextPath = contextPath
+  this.contextPath = contextPath;
+  this.projectRoot = process.cwd();
+  this.babelRc = babelRc;
   this.targetRoot = targetRoot;
   this.cdnName = cdnName;
-  this.copyNodeModules = copyNodeModules;
+  this.ignores = ignores || [];
+  this.copyNodeModules = true;
+  this.babelRc.ignore = this.babelRc.ignore || function () { return false; };
+  this.transformCode = this.transformCode.bind(this);
   this.Resolve = require('./dependencies/ModuleDependencyTemplateAsResolveName.js');
   this.Template = require('./dependencies/NodeRequireHeaderDependencyTemplate.js')
+  this.initCopyAssets(ignores);
 }
 
 NodeModulePlugin.prototype.apply = function (compiler) {
   var thisContext = this
   this.Resolve.setOptions(compiler.options);
+  this.copyWebpackPlugin.apply(compiler);
   compiler.plugin('this-compilation', function (compilation) {
     // 自定义服务端js打包模板渲染 取消webpackrequire机制，改成纯require
     thisContext.registerNodeEntry(compilation)
@@ -53,21 +63,66 @@ NodeModulePlugin.prototype.apply = function (compiler) {
 }
 
 /**
+ * 初始化服务端需要复制的代码
+ */
+NodeModulePlugin.prototype.initCopyAssets = function (ignores) {
+  var relative = path.relative(this.projectRoot, this.targetRoot);
+  var subRelease = relative.indexOf('..') > -1 ? '.git/**/*' : relative.replace(/\\/g, '/') + '/**/*';
+  this.ignores = [
+    subRelease,
+    '.git/**/*',
+    'logs/**/*',
+    '.vscode/**/*',
+    '.happypack/**/*',
+    'node_modules/**/*'
+  ].concat(ignores || []);
+  this.copyWebpackPlugin = new CopyWebpackPlugin(
+    [
+      {
+        from: '*/**',
+        to: this.targetRoot,
+        ignore: this.ignores,
+        transform: this.transformCode,
+        fromArgs: { cwd: this.projectRoot }
+      }
+    ]
+  );
+}
+
+/**
+ * 转换服务端代码
+ */
+NodeModulePlugin.prototype.transformCode = function (content, path) {
+  var babelRc = this.babelRc;
+  if (!/\.js$/.test(path) || babelRc.ignore(path)) {
+    return content;
+  }
+  return babel.transform(String(content).toString(), {
+    babelrc: false,
+    compact: babelRc.compact,
+    presets: babelRc.presets,
+    plugins: babelRc.plugins,
+  }).code;
+}
+
+/**
  * 自定义webpack entry 
  * 目标：实现打包服务端代码，entry不再合并成一个文件，而是保留原始目录结构到目标目录
  */
 NodeModulePlugin.prototype.registerNodeEntry = function (compilation) {
   var thisContext = this
   compilation.plugin('optimize-chunks', function (chunks) {
-    this.chunks = []
+    compilation.chunks = []
     var outputOptions = this.outputOptions
-    var addChunk = this.addChunk.bind(this)
+    var addChunk = compilation.addChunk.bind(compilation)
     var entryChunks = chunks
       .filter(function (chunk) {
         return chunk.hasRuntime() && chunk.name
       }).map(function (chunk) {
         chunk.forEachModule(function (mod) {
           if (mod.userRequest) {
+            var name = path.relative(thisContext.projectRoot, mod.resource || mod.userRequest);
+            thisContext.ignores.push(name.replace(/\\/g, '/'));
             thisContext.handleAddChunk(addChunk, mod, chunk, compilation)
           }
         })
@@ -86,18 +141,20 @@ NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, comp
   if (info.ext !== '.js') {
     name = name + info.ext;
   }
-  if (!newChunk) {
+  if (!newChunk && !mod.external) {
     mod.variables = [];
     var entrypoint = new Entrypoint(name)
     newChunk = this.extraChunks[nameWith] = addChunk(name)
     entrypoint.chunks.push(newChunk)
-    newChunk.entrypoints = [entrypoint]
+    newChunk.addGroup(entrypoint);
     if (info.dir.indexOf("node_modules") > -1) {
       this.handlePackage(newChunk, mod, addChunk)
     }
   }
-  newChunk.addModule(mod)
-  mod.addChunk(newChunk)
+  if (newChunk) {
+    newChunk.addModule(mod)
+    mod.addChunk(newChunk)
+  }
   mod.removeChunk(chunk)
 }
 
@@ -228,8 +285,8 @@ NodeModulePlugin.prototype.replacement = function (moduleSource) {
  */
 NodeModulePlugin.prototype.copyEntryNodeModules = function (compilation, chunkNodeModuleNames) {
   var targetRoot = this.targetRoot;
+  var projectRoot = this.projectRoot;
   if (this.copyNodeModules) {
-    var projectRoot = process.cwd();
     var allModules = this.getDependencyNodeModules(projectRoot);
     var allModulesKeys = Object.keys(allModules);
     var bin = 'node_modules/.bin';
@@ -237,7 +294,12 @@ NodeModulePlugin.prototype.copyEntryNodeModules = function (compilation, chunkNo
     allModulesKeys.forEach(function (key) {
       var src = allModules[key];
       var dest = path.join(targetRoot, 'node_modules', src.split('node_modules')[1]);
-      fse.copySync(src, dest);
+      fse.copySync(src, dest, {
+        filter: function (name) {
+          name = name.split('node_modules' + path.sep).pop().split(path.sep)[0];
+          return allModules[name];
+        }
+      });
     })
   }
 }
@@ -261,10 +323,14 @@ NodeModulePlugin.prototype.findPackageDependencies = function (file, projectRoot
   var thisContext = this;
   var package = require(file);
   var dependencies = Object.keys(package.dependencies || {});
+  var exclude = [
+    'react-native-on-web-bundler',
+    'react-native-on-web-cli'
+  ];
   var selfRoot = path.dirname(file);
   allModules = allModules || {};
   dependencies.forEach(function (dependency) {
-    if (dependency == 'rnw-bundler') {
+    if (exclude.indexOf(dependency) > -1) {
       return;
     }
     if (!allModules[dependency]) {
