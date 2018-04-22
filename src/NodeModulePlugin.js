@@ -99,6 +99,7 @@ NodeModulePlugin.prototype.transformCode = function (content, path) {
   }
   return babel.transform(String(content).toString(), {
     babelrc: false,
+    filename: path,
     compact: babelRc.compact,
     presets: babelRc.presets,
     plugins: babelRc.plugins,
