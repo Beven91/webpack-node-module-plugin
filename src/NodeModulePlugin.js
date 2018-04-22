@@ -70,6 +70,8 @@ NodeModulePlugin.prototype.initCopyAssets = function (ignores) {
   var subRelease = relative.indexOf('..') > -1 ? '.git/**/*' : relative.replace(/\\/g, '/') + '/**/*';
   this.ignores = [
     subRelease,
+    '.gitignore',
+    '.eslintrc.js',
     '.git/**/*',
     'logs/**/*',
     '.vscode/**/*',
@@ -78,6 +80,20 @@ NodeModulePlugin.prototype.initCopyAssets = function (ignores) {
   ].concat(ignores || []);
   this.copyWebpackPlugin = new CopyWebpackPlugin(
     [
+      {
+        from: '*',
+        to: this.targetRoot,
+        ignore: this.ignores,
+        transform: this.transformCode,
+        fromArgs: { cwd: this.projectRoot }
+      },
+      {
+        from: '.*',
+        to: this.targetRoot,
+        ignore: this.ignores,
+        transform: this.transformCode,
+        fromArgs: { cwd: this.projectRoot }
+      },
       {
         from: '*/**',
         to: this.targetRoot,
