@@ -13,7 +13,8 @@
   "author": "Beven",
   "license": "MIT",
   "peerDependencies": {
-    "webpack": "^2.5.1"
+    "webpack": "^2.5.1",
+    "babel-cli": "^6.26.0"
   },
   "bugs": {
     "url": "https://github.com/Beven91/webpack-node-module-plugin/issues"
