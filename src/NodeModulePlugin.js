@@ -369,9 +369,9 @@ NodeModulePlugin.prototype.findPackageDependencies = function (file, projectRoot
  */
 NodeModulePlugin.prototype.getPackagePath = function (parentDir, projectRoot, name) {
   var projectNodeModule = null;
-  var pathRoot = path.parse(projectRoot).root;
+  var pathRoot = path.parse(parentDir).root;
   for (
-    var currentRoot = projectRoot;
+    var currentRoot = parentDir;
     currentRoot != pathRoot;
     currentRoot = path.dirname(currentRoot)
   ) {
