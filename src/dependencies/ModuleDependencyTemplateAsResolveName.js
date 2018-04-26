@@ -20,7 +20,7 @@ function ModuleDependencyTemplateAsResolveName() {
 /**
  * 依赖模块引用替换处理
  */
-ModuleDependencyTemplateAsResolveName.prototype.apply = function (dep, source, outputOptions, requestShortener) {
+ModuleDependencyTemplateAsResolveName.prototype.apply = function (dep, source) {
   if (!dep.range) return
   var module = dep.module
   var request = dep.userRequest

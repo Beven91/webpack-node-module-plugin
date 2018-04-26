@@ -13,8 +13,7 @@ var Entrypoint = require('webpack/lib/Entrypoint');
 var NormalModule = require('webpack/lib/NormalModule.js');
 var AMDPlugin = require('webpack/lib/dependencies/AMDPlugin.js');
 var ConcatSource = require('webpack-sources').ConcatSource;
-var CopyWebpackPlugin = require('copy-webpack-plugin');
-var babel = require('babel-core');
+var NodeModuleAssetsDependency = require('./dependencies/NodeModuleAssetsDependency');
 
 //取消AMD模式
 AMDPlugin.prototype.apply = function () {
@@ -34,22 +33,19 @@ function NodeModulePlugin(contextPath, cdnName, targetRoot, babelRc, ignores) {
   this.extraPackage = {};
   this.contextPath = contextPath;
   this.projectRoot = process.cwd();
-  this.babelRc = babelRc;
   this.targetRoot = targetRoot;
+  this.copyRules = [];
   this.cdnName = cdnName;
-  this.ignores = ignores || [];
   this.copyNodeModules = true;
-  this.babelRc.ignore = this.babelRc.ignore || function () { return false; };
-  this.transformCode = this.transformCode.bind(this);
   this.Resolve = require('./dependencies/ModuleDependencyTemplateAsResolveName.js');
-  this.Template = require('./dependencies/NodeRequireHeaderDependencyTemplate.js')
-  this.initCopyAssets(ignores);
+  this.Template = require('./dependencies/NodeRequireHeaderDependencyTemplate.js');
+  this.NodeModule = new NodeModuleAssetsDependency(this.projectRoot,targetRoot,babelRc,ignores);
 }
 
 NodeModulePlugin.prototype.apply = function (compiler) {
   var thisContext = this
   this.Resolve.setOptions(compiler.options);
-  this.copyWebpackPlugin.apply(compiler);
+  this.NodeModule.apply(compiler);
   compiler.plugin('this-compilation', function (compilation) {
     // 自定义服务端js打包模板渲染 取消webpackrequire机制，改成纯require
     thisContext.registerNodeEntry(compilation)
@@ -60,66 +56,6 @@ NodeModulePlugin.prototype.apply = function (compiler) {
     //注册 normal-module-loader
     thisContext.registerNodeNormalModuleLoader(compilation);
   })
-}
-
-/**
- * 初始化服务端需要复制的代码
- */
-NodeModulePlugin.prototype.initCopyAssets = function (ignores) {
-  var relative = path.relative(this.projectRoot, this.targetRoot);
-  var subRelease = relative.indexOf('..') > -1 ? '.git/**/*' : relative.replace(/\\/g, '/') + '/**/*';
-  this.ignores = [
-    subRelease,
-    '.gitignore',
-    '.eslintrc.js',
-    '.git/**/*',
-    'logs/**/*',
-    '.vscode/**/*',
-    '.happypack/**/*',
-    'node_modules/**/*'
-  ].concat(ignores || []);
-  this.copyWebpackPlugin = new CopyWebpackPlugin(
-    [
-      {
-        from: '*',
-        to: this.targetRoot,
-        ignore: this.ignores,
-        transform: this.transformCode,
-        fromArgs: { cwd: this.projectRoot }
-      },
-      {
-        from: '.*',
-        to: this.targetRoot,
-        ignore: this.ignores,
-        transform: this.transformCode,
-        fromArgs: { cwd: this.projectRoot }
-      },
-      {
-        from: '*/**',
-        to: this.targetRoot,
-        ignore: this.ignores,
-        transform: this.transformCode,
-        fromArgs: { cwd: this.projectRoot }
-      }
-    ]
-  );
-}
-
-/**
- * 转换服务端代码
- */
-NodeModulePlugin.prototype.transformCode = function (content, path) {
-  var babelRc = this.babelRc;
-  if (!/\.js$/.test(path) || babelRc.ignore(path)) {
-    return content;
-  }
-  return babel.transform(String(content).toString(), {
-    babelrc: false,
-    filename: path,
-    compact: babelRc.compact,
-    presets: babelRc.presets,
-    plugins: babelRc.plugins,
-  }).code;
 }
 
 /**
@@ -136,10 +72,10 @@ NodeModulePlugin.prototype.registerNodeEntry = function (compilation) {
       .filter(function (chunk) {
         return chunk.hasRuntime() && chunk.name
       }).map(function (chunk) {
-        chunk.forEachModule(function (mod) {
+        chunk.modulesIterable.forEach(function (mod) {
           if (mod.userRequest) {
             var name = path.relative(thisContext.projectRoot, mod.resource || mod.userRequest);
-            thisContext.ignores.push(name.replace(/\\/g, '/'));
+            thisContext.NodeModule.applyRule(name.replace(/\\/g, '/'));
             thisContext.handleAddChunk(addChunk, mod, chunk, compilation)
           }
         })
@@ -151,7 +87,7 @@ NodeModulePlugin.prototype.registerNodeEntry = function (compilation) {
  * 处理文件输出
  */
 NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, compilation) {
-  var info = path.parse(path.relative(this.contextPath, mod.userRequest))
+  var info = path.parse(path.relative(this.projectRoot, mod.userRequest))
   var name = path.join(info.root, info.dir, info.name)
   var nameWith = name + info.ext;
   var newChunk = this.extraChunks[nameWith]
@@ -214,9 +150,9 @@ NodeModulePlugin.prototype.registerNodePackage = function (compiler) {
       var file = compilation.getPath(chunkTemplate, { chunk: chunkPackage.chunk })
       var outputPath = path.dirname(file);
       var copyTo = outputPath + '/' + chunkPackage.name;
-      var package = fse.readJsonSync(pgk);
-      package.main = chunkPackage.main;
-      var content = JSON.stringify(package, null, 4);
+      var pgk = fse.readJsonSync(pgk);
+      pgk.main = chunkPackage.main;
+      var content = JSON.stringify(pgk, null, 4);
       var size = content.length;
       chunkModuleNames.push(chunkPackage.packageName)
       compilation.assets[copyTo] = {
@@ -244,7 +180,7 @@ NodeModulePlugin.prototype.registerNodeTemplate = function (compilation) {
   var replacement = this.replacement.bind(this);
   compilation.mainTemplate.plugin('render', function (bootstrapSource, chunk, hash, moduleTemplate, dependencyTemplates) {
     var source = new ConcatSource()
-    chunk.forEachModule(function (module) {
+    chunk.modulesIterable.forEach(function (module) {
       var ext = path.extname(module.userRequest)
       var assets = Object.keys(module.assets || {});
       var moduleSource = null
