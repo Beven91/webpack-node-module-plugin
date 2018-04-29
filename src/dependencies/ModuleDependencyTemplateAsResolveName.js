@@ -8,6 +8,7 @@ var path = require('path')
 var CommonJsRequireDependency = require('webpack/lib/dependencies/CommonJsRequireDependency.js')
 
 var resolveExtensions = [];
+var resolveAlias = {};
 var ORIGINAL_REQUIRE_JS = require.extensions['.js'];
 
 /**
@@ -31,67 +32,67 @@ ModuleDependencyTemplateAsResolveName.prototype.apply = function (dep, source) {
   var cExtName = path.extname(content);
   var extName = path.extname(resource || content)
   var hasAssets = Object.keys(module.assets || {}).length > 0;
-  
-  if(path.isAbsolute(content)){
-    content = this.absoluteResolve(content,sourcePath);
-  }else if (resource && isRequirejs) {
-    content = this.relativeResolve(sourcePath,resource);
+
+  if (path.isAbsolute(content)) {
+    content = this.absoluteResolve(content, sourcePath);
+  } else if (resource && isRequirejs) {
+    content = this.relativeResolve(sourcePath, resource);
   } else if (hasAssets && extName && extName != '.js') {
-    content = this.assetsResolve(content,extName);
-   } else if (content.indexOf('/') > -1 && cExtName !== extName && cExtName!=='.js') {
-    content = this.moduleFileResolve(content,resource,extName);
-  }else if(extName!=='' && extName!=='.js') {
+    content = this.assetsResolve(content, extName);
+  } else if (content.indexOf('/') > -1 && cExtName !== extName && cExtName !== '.js') {
+    content = this.moduleFileResolve(content, resource, extName);
+  } else if (extName !== '' && extName !== '.js') {
     var info = path.parse(content)
-    content = path.join(info.dir, info.name + extName+'.js').replace(/\\/g, '/');
+    content = path.join(info.dir, info.name + extName + '.js').replace(/\\/g, '/');
   }
+  content = resolveAlias[content] || content;
   source.replace(dep.range[0], dep.range[1] - 1, '\'' + content + '\'');
 }
 
 /**
  * 绝对路径引用处理 require('d:/as/aa.js')
  */
-ModuleDependencyTemplateAsResolveName.prototype.absoluteResolve  =function(content,sourcePath){
-    var holder = "node_modules/";
-    var index = content.indexOf(holder);
-    if(index>-1){
-      return content.substring(index+holder.length);
-    }else{
-      return this.relativeResolve(sourcePath,content)
-    }
+ModuleDependencyTemplateAsResolveName.prototype.absoluteResolve = function (content, sourcePath) {
+  var holder = "node_modules/";
+  var index = content.indexOf(holder);
+  if (index > -1) {
+    return content.substring(index + holder.length);
+  } else {
+    return this.relativeResolve(sourcePath, content)
+  }
 }
 
 /**
  * 相对require处理 例如: require('./xxx')
  */
-ModuleDependencyTemplateAsResolveName.prototype.relativeResolve  =function(sourcePath,resource){
-    sourcePath = sourcePath.split('!').pop();
-    sourcePath = path.dirname(sourcePath)
-    var content = path.relative(sourcePath, resource)
-    var extName = path.extname(resource)
-    var info = path.parse(content)
-    extName = extName !== '.js' ? extName + '.js' : extName;
-    content = path.join(info.dir, info.name + extName)
-    content = './' + content.replace(/\\/g, '/')
-    return content;
+ModuleDependencyTemplateAsResolveName.prototype.relativeResolve = function (sourcePath, resource) {
+  sourcePath = sourcePath.split('!').pop();
+  sourcePath = path.dirname(sourcePath)
+  var content = path.relative(sourcePath, resource)
+  var extName = path.extname(resource)
+  var info = path.parse(content)
+  extName = extName !== '.js' ? extName + '.js' : extName;
+  content = path.join(info.dir, info.name + extName)
+  content = './' + content.replace(/\\/g, '/')
+  return content;
 }
 
 /**
  * 静态资源 require require('./a.jpg')
  */
-ModuleDependencyTemplateAsResolveName.prototype.assetsResolve  =function(request,extName){
-    var info = path.parse(request)
-    request = path.join(info.dir, info.name + extName + '.js')
-    return request.replace(/\\/g, '/')
+ModuleDependencyTemplateAsResolveName.prototype.assetsResolve = function (request, extName) {
+  var info = path.parse(request)
+  request = path.join(info.dir, info.name + extName + '.js')
+  return request.replace(/\\/g, '/')
 }
 
 /**
  * 模块下文件引用处理 require('webpack/lib/NormalModule.js')
  */
-ModuleDependencyTemplateAsResolveName.prototype.moduleFileResolve  =function(content,resource,extName){
-    var resolve = (extName=='.js'? resource: require.resolve(content)).replace(/\\/g, '/');
-    var moduleName = content.split('/')[0];
-    var usePath = resolve.split('node_modules/'+moduleName).pop()
-    return moduleName + usePath;
+ModuleDependencyTemplateAsResolveName.prototype.moduleFileResolve = function (content, resource, extName) {
+  var resolve = (extName == '.js' ? resource : require.resolve(content)).replace(/\\/g, '/');
+  var usePath = resolve.split('node_modules/').pop()
+  return usePath;
 }
 
 // 覆盖默认模板
@@ -100,6 +101,7 @@ CommonJsRequireDependency.Template = ModuleDependencyTemplateAsResolveName
 module.exports.setOptions = function (options) {
   var resolve = options.resolve || {};
   resolveExtensions = resolve.extensions || [];
+  resolveAlias = resolve.alias;
   resolveExtensions.forEach(function (ext) {
     require.extensions[ext] = ORIGINAL_REQUIRE_JS;
   })

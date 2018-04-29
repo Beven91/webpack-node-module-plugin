@@ -39,7 +39,7 @@ function NodeModulePlugin(contextPath, cdnName, targetRoot, babelRc, ignores) {
   this.copyNodeModules = true;
   this.Resolve = require('./dependencies/ModuleDependencyTemplateAsResolveName.js');
   this.Template = require('./dependencies/NodeRequireHeaderDependencyTemplate.js');
-  this.NodeModule = new NodeModuleAssetsDependency(this.projectRoot,targetRoot,babelRc,ignores);
+  this.NodeModule = new NodeModuleAssetsDependency(this.projectRoot, targetRoot, babelRc, ignores);
 }
 
 NodeModulePlugin.prototype.apply = function (compiler) {
@@ -93,6 +93,9 @@ NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, comp
   var newChunk = this.extraChunks[nameWith]
   if (info.ext !== '.js') {
     name = name + info.ext;
+  }
+  if (name.indexOf('..' + path.sep) > -1) {
+    name = name.replace('..' + path.sep, '');
   }
   if (!newChunk && !mod.external) {
     mod.variables = [];
