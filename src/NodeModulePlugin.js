@@ -45,6 +45,7 @@ function NodeModulePlugin(contextPath, cdnName, targetRoot, babelRc, ignores) {
 NodeModulePlugin.prototype.apply = function (compiler) {
   var thisContext = this
   this.Resolve.setOptions(compiler.options);
+  this.mainFields = compiler.options.resolve.mainFields || [];
   this.NodeModule.apply(compiler);
   compiler.plugin('this-compilation', function (compilation) {
     // 自定义服务端js打包模板渲染 取消webpackrequire机制，改成纯require
@@ -126,7 +127,6 @@ NodeModulePlugin.prototype.handlePackage = function (chunk, mod, addChunk) {
   var packageName = request.substring(lastNodeIndex).split(path.sep)[1] || '';
   var baseDir = request.substring(0, lastNodeIndex) + 'node_modules/' + packageName;
   var pgk = path.join(baseDir, 'package.json');
-  var main = resource.substring(lastNodeIndex).replace(/\\/g, '/').split('node_modules/' + packageName + '/').pop();
   var name = request.substring(firstNodeIndex, lastNodeIndex) + 'node_modules/' + packageName + '/package.json';
   if (name.indexOf('..' + path.sep) > -1) {
     name = name.replace(/(\.\.\\)|(\.\.\/)/g, '');
@@ -134,12 +134,27 @@ NodeModulePlugin.prototype.handlePackage = function (chunk, mod, addChunk) {
   if (!this.extraPackage[pgk] && fse.existsSync(pgk)) {
     this.extraPackage[pgk] = {
       file: pgk,
-      main: main,
+      main: this.getMain(require(pgk)),
       packageName: packageName,
       name: name,
       chunk: chunk
     }
   }
+}
+
+/**
+ * 获取package.json中的main
+ */
+NodeModulePlugin.prototype.getMain = function (pgk) {
+  var main = null;
+  var mainFields = this.mainFields;
+  for (var i = 0, k = mainFields.length; i < k; i++) {
+    main = pgk[mainFields[i]];
+    if (main) {
+      return main;
+    }
+  }
+  return require.resolve(pgk.name).split('node_modules' + path.sep).shift();
 }
 
 /**
@@ -255,7 +270,6 @@ NodeModulePlugin.prototype.copyEntryNodeModules = function (compilation, chunkNo
       var src = allModules[key];
       var dest = path.join(targetRoot, 'node_modules', src.split('node_modules').slice(1).join('node_modules'));
       fse.copySync(src, dest, {
-        overwrite:false,
         filter: function (name) {
           name = name.split('node_modules' + path.sep).pop().split(path.sep)[0];
           return allModules[name];
