@@ -95,7 +95,7 @@ NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, comp
     name = name + info.ext;
   }
   if (name.indexOf('..' + path.sep) > -1) {
-    name = name.replace('..' + path.sep, '');
+    name = name.replace(/(\.\.\\)|(\.\.\/)/g, '');
   }
   if (!newChunk && !mod.external) {
     mod.variables = [];
@@ -127,12 +127,16 @@ NodeModulePlugin.prototype.handlePackage = function (chunk, mod, addChunk) {
   var baseDir = request.substring(0, lastNodeIndex) + 'node_modules/' + packageName;
   var pgk = path.join(baseDir, 'package.json');
   var main = resource.substring(lastNodeIndex).replace(/\\/g, '/').split('node_modules/' + packageName + '/').pop();
+  var name = request.substring(firstNodeIndex, lastNodeIndex) + 'node_modules/' + packageName + '/package.json';
+  if (name.indexOf('..' + path.sep) > -1) {
+    name = name.replace(/(\.\.\\)|(\.\.\/)/g, '');
+  }
   if (!this.extraPackage[pgk] && fse.existsSync(pgk)) {
     this.extraPackage[pgk] = {
       file: pgk,
       main: main,
       packageName: packageName,
-      name: request.substring(firstNodeIndex, lastNodeIndex) + 'node_modules/' + packageName + '/package.json',
+      name: name,
       chunk: chunk
     }
   }
@@ -151,7 +155,7 @@ NodeModulePlugin.prototype.registerNodePackage = function (compiler) {
       var chunkPackage = thisContext.extraPackage[key];
       var pgk = chunkPackage.file;
       var file = compilation.getPath(chunkTemplate, { chunk: chunkPackage.chunk })
-      var outputPath = path.dirname(file);
+      var outputPath = path.dirname(file).split('node_modules').shift();
       var copyTo = outputPath + '/' + chunkPackage.name;
       var pgk = fse.readJsonSync(pgk);
       pgk.main = chunkPackage.main;
@@ -248,6 +252,9 @@ NodeModulePlugin.prototype.copyEntryNodeModules = function (compilation, chunkNo
     var bin = 'node_modules/.bin';
     fse.copySync(path.join(projectRoot, bin), path.join(targetRoot, bin));
     allModulesKeys.forEach(function (key) {
+      if(chunkNodeModuleNames.indexOf(key)>-1){
+        return;
+      }
       var src = allModules[key];
       var dest = path.join(targetRoot, 'node_modules', src.split('node_modules').slice(1).join('node_modules'));
       fse.copySync(src, dest, {
