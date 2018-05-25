@@ -252,12 +252,10 @@ NodeModulePlugin.prototype.copyEntryNodeModules = function (compilation, chunkNo
     var bin = 'node_modules/.bin';
     fse.copySync(path.join(projectRoot, bin), path.join(targetRoot, bin));
     allModulesKeys.forEach(function (key) {
-      if(chunkNodeModuleNames.indexOf(key)>-1){
-        return;
-      }
       var src = allModules[key];
       var dest = path.join(targetRoot, 'node_modules', src.split('node_modules').slice(1).join('node_modules'));
       fse.copySync(src, dest, {
+        overwrite:false,
         filter: function (name) {
           name = name.split('node_modules' + path.sep).pop().split(path.sep)[0];
           return allModules[name];
