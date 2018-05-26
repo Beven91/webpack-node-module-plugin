@@ -154,7 +154,7 @@ NodeModulePlugin.prototype.getMain = function (pgk, pgkPath) {
       return main;
     }
   }
-  return path.join(path.dirname(pgkPath), 'index.js');
+  return 'index.js';
 }
 
 /**
