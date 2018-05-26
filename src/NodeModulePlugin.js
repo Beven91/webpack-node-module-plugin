@@ -134,7 +134,7 @@ NodeModulePlugin.prototype.handlePackage = function (chunk, mod, addChunk) {
   if (!this.extraPackage[pgk] && fse.existsSync(pgk)) {
     this.extraPackage[pgk] = {
       file: pgk,
-      main: this.getMain(require(pgk)),
+      main: this.getMain(require(pgk), pgk),
       packageName: packageName,
       name: name,
       chunk: chunk
@@ -145,7 +145,7 @@ NodeModulePlugin.prototype.handlePackage = function (chunk, mod, addChunk) {
 /**
  * 获取package.json中的main
  */
-NodeModulePlugin.prototype.getMain = function (pgk) {
+NodeModulePlugin.prototype.getMain = function (pgk, pgkPath) {
   var main = null;
   var mainFields = this.mainFields;
   for (var i = 0, k = mainFields.length; i < k; i++) {
@@ -154,7 +154,7 @@ NodeModulePlugin.prototype.getMain = function (pgk) {
       return main;
     }
   }
-  return require.resolve(pgk.name).split('node_modules' + path.sep).shift();
+  return path.join(path.dirname(pgkPath), 'index.js');
 }
 
 /**
