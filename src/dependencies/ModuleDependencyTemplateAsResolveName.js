@@ -69,9 +69,9 @@ ModuleDependencyTemplateAsResolveName.prototype.relativeResolve = function (sour
   sourcePath = sourcePath.split('!').pop();
   sourcePath = path.dirname(sourcePath)
   var content = path.relative(sourcePath, resource)
-  var extName = path.extname(resource)
+  var extName = path.extname(resource).replace(/\s/g, '')
   var info = path.parse(content)
-  extName = extName !== '.js' ? extName + '.js' : extName;
+  extName = !extName ? extName + '.js' : extName;
   content = path.join(info.dir, info.name + extName)
   content = './' + content.replace(/\\/g, '/')
   return content;

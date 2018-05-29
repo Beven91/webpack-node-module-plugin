@@ -34,6 +34,7 @@ NodeModuleAssetsDependency.prototype.initRules = function (ignores) {
     '.gitignore',
     '.eslintrc.js',
     '.git/**/*',
+    'assets.json',
     'logs/**/*',
     '.vscode/**/*',
     '.happypack/**/*',
