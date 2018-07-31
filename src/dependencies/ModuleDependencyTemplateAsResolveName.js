@@ -5,10 +5,12 @@
  *      从而实现 require(模块名称)  而不是require(模块id)
  */
 var path = require('path')
+var NameResolve = require('./NameResolve');
 var CommonJsRequireDependency = require('webpack/lib/dependencies/CommonJsRequireDependency.js')
 
 var resolveExtensions = [];
 var resolveAlias = {};
+var ProjectRoot = null;
 var ORIGINAL_REQUIRE_JS = require.extensions['.js'];
 
 /**
@@ -68,7 +70,9 @@ ModuleDependencyTemplateAsResolveName.prototype.absoluteResolve = function (cont
 ModuleDependencyTemplateAsResolveName.prototype.relativeResolve = function (sourcePath, resource) {
   sourcePath = sourcePath.split('!').pop();
   sourcePath = path.dirname(sourcePath)
-  var content = path.relative(sourcePath, resource)
+  var movedSourcePath = NameResolve.moveToProjectRoot(ProjectRoot, sourcePath);
+  var movedSource = NameResolve.moveToProjectRoot(ProjectRoot,resource);
+  var content = path.relative(movedSourcePath, movedSource)
   var extName = path.extname(resource).replace(/\s/g, '')
   var info = path.parse(content)
   extName = !extName ? extName + '.js' : extName;
@@ -98,8 +102,9 @@ ModuleDependencyTemplateAsResolveName.prototype.moduleFileResolve = function (co
 // 覆盖默认模板
 CommonJsRequireDependency.Template = ModuleDependencyTemplateAsResolveName
 
-module.exports.setOptions = function (options) {
+module.exports.setOptions = function (options,projectRoot) {
   var resolve = options.resolve || {};
+  ProjectRoot = projectRoot;
   resolveExtensions = resolve.extensions || [];
   resolveAlias = resolve.alias;
   resolveExtensions.forEach(function (ext) {

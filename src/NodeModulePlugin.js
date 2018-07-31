@@ -10,9 +10,9 @@
 var path = require('path');
 var fse = require('fs-extra');
 var Entrypoint = require('webpack/lib/Entrypoint');
-var NormalModule = require('webpack/lib/NormalModule.js');
 var AMDPlugin = require('webpack/lib/dependencies/AMDPlugin.js');
 var ConcatSource = require('webpack-sources').ConcatSource;
+var NameResolve = require('./dependencies/NameResolve.js');
 var NodeModuleAssetsDependency = require('./dependencies/NodeModuleAssetsDependency');
 
 //取消AMD模式
@@ -44,7 +44,7 @@ function NodeModulePlugin(contextPath, cdnName, targetRoot, babelRc, ignores) {
 
 NodeModulePlugin.prototype.apply = function (compiler) {
   var thisContext = this
-  this.Resolve.setOptions(compiler.options);
+  this.Resolve.setOptions(compiler.options,this.projectRoot);
   this.mainFields = compiler.options.resolve.mainFields || [];
   this.NodeModule.apply(compiler);
   compiler.plugin('this-compilation', function (compilation) {
@@ -88,7 +88,7 @@ NodeModulePlugin.prototype.registerNodeEntry = function (compilation) {
  * 处理文件输出
  */
 NodeModulePlugin.prototype.handleAddChunk = function (addChunk, mod, chunk, compilation) {
-  var info = path.parse(path.relative(this.projectRoot, mod.userRequest))
+  var info = path.parse(NameResolve.getProjectRelative(this.projectRoot, mod.userRequest))
   var name = path.join(info.root, info.dir, info.name)
   var nameWith = name + info.ext;
   var newChunk = this.extraChunks[nameWith]
@@ -283,8 +283,8 @@ NodeModulePlugin.prototype.copyEntryNodeModules = function (compilation, chunkNo
  * 获取工程目录下需要复制的node_modules
  */
 NodeModulePlugin.prototype.getDependencyNodeModules = function (projectRoot) {
-  var package = path.join(projectRoot, 'package.json');
-  return this.findPackageDependencies(package, projectRoot);
+  var pgk = path.join(projectRoot, 'package.json');
+  return this.findPackageDependencies(pgk, projectRoot);
 }
 
 /**
@@ -296,8 +296,8 @@ NodeModulePlugin.prototype.getDependencyNodeModules = function (projectRoot) {
  */
 NodeModulePlugin.prototype.findPackageDependencies = function (file, projectRoot, allModules) {
   var thisContext = this;
-  var package = require(file);
-  var dependencies = Object.keys(package.dependencies || {});
+  var pgk = require(file);
+  var dependencies = Object.keys(pgk.dependencies || {});
   var exclude = [
     'react-native-on-web-bundler',
     'react-native-on-web-cli'
