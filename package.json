@@ -1,35 +1,4 @@
 {
-  "_args": [
-    [
-      "webpack-node-module-plugin@2.0.0",
-      "D:\\Works\\Personal\\Demo\\game-2048-master\\web"
-    ]
-  ],
-  "_from": "webpack-node-module-plugin@2.0.0",
-  "_id": "webpack-node-module-plugin@2.0.0",
-  "_inBundle": false,
-  "_integrity": "sha512-PgMS23OjdR61gfvXsTzfdMFwvUZH9WEz2jBt340bXs2mhdE3c4gmO+DmUh4xHaNoKfmgTykiBWeDs0W/HWxG2A==",
-  "_location": "/webpack-node-module-plugin",
-  "_phantomChildren": {
-    "graceful-fs": "4.1.11",
-    "universalify": "0.1.1"
-  },
-  "_requested": {
-    "type": "version",
-    "registry": true,
-    "raw": "webpack-node-module-plugin@2.0.0",
-    "name": "webpack-node-module-plugin",
-    "escapedName": "webpack-node-module-plugin",
-    "rawSpec": "2.0.0",
-    "saveSpec": null,
-    "fetchSpec": "2.0.0"
-  },
-  "_requiredBy": [
-    "/react-native-on-web-bundler"
-  ],
-  "_resolved": "https://registry.npmjs.org/webpack-node-module-plugin/-/webpack-node-module-plugin-2.0.0.tgz",
-  "_spec": "2.0.0",
-  "_where": "D:\\Works\\Personal\\Demo\\game-2048-master\\web",
   "author": {
     "name": "Beven"
   },
@@ -55,5 +24,5 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "version": "2.0.7"
+  "version": "2.0.8"
 }
