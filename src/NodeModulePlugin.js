@@ -14,6 +14,7 @@ var AMDPlugin = require('webpack/lib/dependencies/AMDPlugin.js');
 var ConcatSource = require('webpack-sources').ConcatSource;
 var NameResolve = require('./dependencies/NameResolve.js');
 var NodeModuleAssetsDependency = require('./dependencies/NodeModuleAssetsDependency');
+var NormalPathResolve = require('./dependencies/NormalPathResolve');
 
 //取消AMD模式
 AMDPlugin.prototype.apply = function () {
@@ -44,9 +45,12 @@ function NodeModulePlugin(contextPath, cdnName, targetRoot, babelRc, ignores) {
 
 NodeModulePlugin.prototype.apply = function (compiler) {
   var thisContext = this
-  this.Resolve.setOptions(compiler.options,this.projectRoot);
+  this.Resolve.setOptions(compiler.options, this.projectRoot);
   this.mainFields = compiler.options.resolve.mainFields || [];
   this.NodeModule.apply(compiler);
+  //解决在node方式webpack编译css文件等文件时，产生 !xxxx!xxx.css等文件，，找不到模块错误
+  NormalPathResolve.makeResolve();
+  //设置webpack compiler钩子
   compiler.plugin('this-compilation', function (compilation) {
     // 自定义服务端js打包模板渲染 取消webpackrequire机制，改成纯require
     thisContext.registerNodeEntry(compilation)

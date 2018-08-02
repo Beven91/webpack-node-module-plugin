@@ -34,7 +34,9 @@ ModuleDependencyTemplateAsResolveName.prototype.apply = function (dep, source) {
   var cExtName = path.extname(content);
   var extName = path.extname(resource || content)
   var hasAssets = Object.keys(module.assets || {}).length > 0;
-
+  if(path.extname(sourcePath)==='.css'){
+    return;
+  }
   if (path.isAbsolute(content)) {
     content = this.absoluteResolve(content, sourcePath);
   } else if (resource && isRequirejs) {
